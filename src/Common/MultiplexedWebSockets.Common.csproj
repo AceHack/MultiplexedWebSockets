@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <ProjectGuid>{608CB965-1ECF-4D06-AF73-F2796D8584E4}</ProjectGuid>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <CodeAnalysisRuleSet>..\MultiplexedWebSockets.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\MultiplexedWebSockets.ruleset" Link="MultiplexedWebSockets.ruleset" />
+    <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="2.6.2" developmentDependency="true" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="2.9.0" developmentDependency="true" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="2.6.2" developmentDependency="true" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.DotNet.Analyzers.Compatibility" Version="0.2.12-alpha" developmentDependency="true" PrivateAssets="all" />
+    <PackageReference Include="StyleCop.Analyzers" Version="1.0.2" developmentDependency="true" PrivateAssets="all" />
+    <PackageReference Include="System.Memory" Version="4.5.1" />
+  </ItemGroup>
+
+</Project>
