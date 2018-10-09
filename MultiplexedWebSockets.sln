@@ -7,7 +7,15 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MultiplexedWebSockets.Bench
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MultiplexedWebSockets.Client", "src\Client\MultiplexedWebSockets.Client.csproj", "{6837016B-AA97-4FC6-9E7C-EEDF639320F7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiplexedWebSockets.Common", "src\Common\MultiplexedWebSockets.Common.csproj", "{608CB965-1ECF-4D06-AF73-F2796D8584E4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MultiplexedWebSockets.Common", "src\Common\MultiplexedWebSockets.Common.csproj", "{608CB965-1ECF-4D06-AF73-F2796D8584E4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{E0D904AC-54DC-4EBA-AD8C-C5D910C86D32}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		LICENSE = LICENSE
+		src\MultiplexedWebSockets.ruleset = src\MultiplexedWebSockets.ruleset
+		src\stylecop.json = src\stylecop.json
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
