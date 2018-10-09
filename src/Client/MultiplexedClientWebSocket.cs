@@ -28,6 +28,7 @@ namespace MultiplexedWebSockets
         private readonly MemoryPool<byte> _memoryPool;
         private readonly Task _readFromSendPipeLoopTask;
         private readonly Task _writeToReceivePipeLoopTask;
+        private readonly Task _readFromReceivePipeLoopTask;
         private int _disposeCount;
 
         /// <summary>
@@ -44,6 +45,7 @@ namespace MultiplexedWebSockets
             _memoryPool = MemoryPool<byte>.Shared;
             _readFromSendPipeLoopTask = ReadFromSendPipeLoopAsync();
             _writeToReceivePipeLoopTask = WriteToReceivePipeLoopAsync();
+            _readFromReceivePipeLoopTask = ReadFromReceivePipeLoopAsync();
             _disposeCount = 0;
         }
 
@@ -95,15 +97,21 @@ namespace MultiplexedWebSockets
         {
             if (Interlocked.Increment(ref _disposeCount) == 1)
             {
-                await _clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cts.Token).ConfigureAwait(false);
+                if (!_clientWebSocket.CloseStatus.HasValue)
+                {
+                    await _clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cts.Token).ConfigureAwait(false);
+                }
+
                 _clientWebSocket.Dispose();
+                await _readFromSendPipeLoopTask.ConfigureAwait(false);
+                await _writeToReceivePipeLoopTask.ConfigureAwait(false);
+                await _readFromReceivePipeLoopTask.ConfigureAwait(false);
                 _sendBlock.Complete();
+                await _sendBlock.Completion.ConfigureAwait(false);
                 _sendPipe.Writer.Complete();
                 _sendPipe.Reader.Complete();
                 _receivePipe.Writer.Complete();
                 _receivePipe.Reader.Complete();
-                await _readFromSendPipeLoopTask.ConfigureAwait(false);
-                await _writeToReceivePipeLoopTask.ConfigureAwait(false);
                 _cts.Cancel();
             }
         }
