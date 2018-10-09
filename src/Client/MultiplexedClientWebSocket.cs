@@ -14,7 +14,7 @@ namespace MultiplexedWebSockets
     /// </summary>
     public sealed class MultiplexedClientWebSocket
     {
-        private const byte _messageVersion = 1;
+        private const byte _messageEnvelopeVersion = 1;
         private const int _minimumSegmentSize = 64 * 1024;
         private const int _maxMessageSize = 0xFFFF;
         private const int _minimumReceiveBufferSize = 512;
@@ -111,7 +111,7 @@ namespace MultiplexedWebSockets
         private static void UpdateHeader(IMemoryOwner<byte> header, short length, MessageType messageType, Guid id)
         {
             var slice = header.Memory.Span;
-            slice[0] = _messageVersion;
+            slice[0] = _messageEnvelopeVersion;
             slice = slice.Slice(1, 19);
             id.TryWriteBytes(slice);
             slice = slice.Slice(16, 3);
@@ -189,20 +189,25 @@ namespace MultiplexedWebSockets
                         position = null;
                         if (buffer.Length >= _headerLength)
                         {
-                            var data = buffer.Slice(0, 1);
-                            var messageVersion = data.First.Slice(0, 1).Span[0];
-                            if (messageVersion != _messageVersion)
+                            var messageEnvelopeVersion = buffer.Slice(0, 1).First.Slice(0, 1).Span[0];
+                            if (messageEnvelopeVersion != _messageEnvelopeVersion)
                             {
-                                throw new InvalidOperationException($"Invalid message version {messageVersion}, only message version {_messageVersion} supported");
+                                throw new InvalidOperationException($"Invalid message envelope version {messageEnvelopeVersion}, only message envelope version {_messageEnvelopeVersion} supported");
                             }
 
                             var id = new Guid(buffer.Slice(1, 16).ToArray());
-                            var length = BitConverter.ToInt32(buffer.Slice(17, 3).ToArray());
+                            var type = (MessageType)buffer.Slice(19, 1).First.Slice(0, 1).Span[0];
+                            if (type != MessageType.Response)
+                            {
+                                throw new InvalidOperationException($"Invalid message type {type}, message type {MessageType.Response} expected");
+                            }
+
+                            var length = BitConverter.ToInt16(buffer.Slice(17, 1).ToArray());
                             var end = length + _headerLength;
                             if (buffer.Length >= end)
                             {
                                 position = buffer.GetPosition(end);
-                                data = buffer.Slice(_headerLength, position.Value);
+                                var data = buffer.Slice(_headerLength, position.Value);
                                 ProcessData(id, data);
 
                                 if (buffer.Length <= end)
