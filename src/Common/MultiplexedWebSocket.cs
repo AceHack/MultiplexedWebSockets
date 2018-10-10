@@ -12,15 +12,16 @@ namespace MultiplexedWebSockets
     /// <summary>
     /// MultiplexedClientWebSocket
     /// </summary>
-    public sealed class MultiplexedClientWebSocket
+    public sealed class MultiplexedWebSocket
     {
         private const byte _messageEnvelopeVersion = 1;
         private const int _minimumSegmentSize = 64 * 1024;
         private const int _maxMessageSize = 0xFFFF;
         private const int _minimumReceiveBufferSize = 512;
-        private const int _headerLength = 20;
-        private readonly ClientWebSocket _clientWebSocket;
+        private const int _headerLength = 32;
+        private readonly WebSocket _webSocket;
         private readonly CancellationTokenSource _cts;
+        private readonly TaskCompletionSource<bool> _tcs;
         private readonly Pipe _sendPipe;
         private readonly Pipe _receivePipe;
         private readonly ConcurrentDictionary<Guid, TaskCompletionSource<ReadOnlySequence<byte>>> _inFlightRequests;
@@ -32,12 +33,14 @@ namespace MultiplexedWebSockets
         private int _disposeCount;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="MultiplexedClientWebSocket"/> class.
+        /// Initializes a new instance of the <see cref="MultiplexedWebSocket"/> class.
         /// </summary>
-        internal MultiplexedClientWebSocket()
+        /// <param name="webSocket">webSocket</param>
+        public MultiplexedWebSocket(WebSocket webSocket)
         {
-            _clientWebSocket = new ClientWebSocket();
+            _webSocket = webSocket;
             _cts = new CancellationTokenSource();
+            _tcs = new TaskCompletionSource<bool>();
             _sendPipe = new Pipe(new PipeOptions(minimumSegmentSize: _minimumSegmentSize, useSynchronizationContext: false));
             _receivePipe = new Pipe(new PipeOptions(minimumSegmentSize: _minimumSegmentSize, useSynchronizationContext: false));
             _inFlightRequests = new ConcurrentDictionary<Guid, TaskCompletionSource<ReadOnlySequence<byte>>>();
@@ -49,7 +52,12 @@ namespace MultiplexedWebSockets
             _disposeCount = 0;
         }
 
-        /// <summary>Sends data over the <see cref="MultiplexedClientWebSocket"></see> connection asynchronously.</summary>
+        /// <summary>
+        /// Gets Completion
+        /// </summary>
+        public Task Completion => _tcs.Task;
+
+        /// <summary>Sends data over the <see cref="MultiplexedWebSocket"></see> connection asynchronously.</summary>
         /// <param name="buffer">The buffer to be sent over the connection.</param>
         /// <param name="cancellationToken">The token that propagates the notification that operations should be canceled.</param>
         /// <returns>The task object representing the asynchronous operation.</returns>
@@ -97,12 +105,12 @@ namespace MultiplexedWebSockets
         {
             if (Interlocked.Increment(ref _disposeCount) == 1)
             {
-                if (!_clientWebSocket.CloseStatus.HasValue)
+                if (!_webSocket.CloseStatus.HasValue)
                 {
-                    await _clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cts.Token).ConfigureAwait(false);
+                    await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cts.Token).ConfigureAwait(false);
                 }
 
-                _clientWebSocket.Dispose();
+                _webSocket.Dispose();
                 await _readFromSendPipeLoopTask.ConfigureAwait(false);
                 await _writeToReceivePipeLoopTask.ConfigureAwait(false);
                 await _readFromReceivePipeLoopTask.ConfigureAwait(false);
@@ -113,6 +121,7 @@ namespace MultiplexedWebSockets
                 _receivePipe.Writer.Complete();
                 _receivePipe.Reader.Complete();
                 _cts.Cancel();
+                _tcs.TrySetResult(true);
             }
         }
 
@@ -156,7 +165,7 @@ namespace MultiplexedWebSockets
                     {
                         if (segment.Length > 0)
                         {
-                            await _clientWebSocket.SendAsync(segment, WebSocketMessageType.Binary, false, _cts.Token).ConfigureAwait(false);
+                            await _webSocket.SendAsync(segment, WebSocketMessageType.Binary, false, _cts.Token).ConfigureAwait(false);
                         }
                     }
 
@@ -179,6 +188,10 @@ namespace MultiplexedWebSockets
                 {
                     _sendPipe.Reader.Complete();
                 }
+
+#pragma warning disable CS4014
+                DisposeAsync();
+#pragma warning restore CS4014
             }
         }
 
@@ -204,19 +217,14 @@ namespace MultiplexedWebSockets
                             }
 
                             var id = new Guid(buffer.Slice(1, 16).ToArray());
+                            var length = BitConverter.ToInt16(buffer.Slice(17, 2).ToArray());
                             var type = (MessageType)buffer.Slice(19, 1).First.Slice(0, 1).Span[0];
-                            if (type != MessageType.Response)
-                            {
-                                throw new InvalidOperationException($"Invalid message type {type}, message type {MessageType.Response} expected");
-                            }
-
-                            var length = BitConverter.ToInt16(buffer.Slice(17, 1).ToArray());
                             var end = length + _headerLength;
                             if (buffer.Length >= end)
                             {
                                 position = buffer.GetPosition(end);
                                 var data = buffer.Slice(_headerLength, position.Value);
-                                ProcessData(id, data);
+                                await ProcessData(id, type, data).ConfigureAwait(false);
 
                                 if (buffer.Length <= end)
                                 {
@@ -250,6 +258,10 @@ namespace MultiplexedWebSockets
                 {
                     _receivePipe.Reader.Complete();
                 }
+
+#pragma warning disable CS4014
+                DisposeAsync();
+#pragma warning restore CS4014
             }
         }
 
@@ -264,7 +276,7 @@ namespace MultiplexedWebSockets
                     {
                         // Request a minimum of _minimumReceiveBufferSize bytes from the PipeWriter
                         var memory = _receivePipe.Writer.GetMemory(_minimumReceiveBufferSize);
-                        var webSocketResult = await _clientWebSocket.ReceiveAsync(memory, _cts.Token).ConfigureAwait(false);
+                        var webSocketResult = await _webSocket.ReceiveAsync(memory, _cts.Token).ConfigureAwait(false);
                         if (webSocketResult.MessageType == WebSocketMessageType.Close)
                         {
                             break;
@@ -301,14 +313,29 @@ namespace MultiplexedWebSockets
                     // Signal to the reader that we're done writing
                     _receivePipe.Writer.Complete();
                 }
+
+#pragma warning disable CS4014
+                DisposeAsync();
+#pragma warning restore CS4014
             }
         }
 
-        private void ProcessData(Guid id, ReadOnlySequence<byte> buffer)
+        private async Task ProcessData(Guid id, MessageType type, ReadOnlySequence<byte> buffer)
         {
-            if (_inFlightRequests.TryGetValue(id, out var value))
+            if (type == MessageType.Response)
             {
-                value.TrySetResult(buffer);
+                if (_inFlightRequests.TryGetValue(id, out var value))
+                {
+                    value.TrySetResult(buffer);
+                }
+            }
+            else if (type == MessageType.Request)
+            {
+                // Just echo for now
+                var data = new byte[buffer.Length];
+                buffer.CopyTo(data);
+                var tuple = Tuple.Create(MessageType.Response, id, new ReadOnlySequence<byte>(data), _cts.Token);
+                await _sendBlock.SendAsync(tuple, _cts.Token).ConfigureAwait(false);
             }
         }
 
@@ -316,7 +343,7 @@ namespace MultiplexedWebSockets
         {
             if (_disposeCount > 0)
             {
-                throw new ObjectDisposedException(typeof(MultiplexedClientWebSocket).Name);
+                throw new ObjectDisposedException(typeof(MultiplexedWebSocket).Name);
             }
         }
     }

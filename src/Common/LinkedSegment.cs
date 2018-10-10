@@ -7,7 +7,7 @@ namespace MultiplexedWebSockets
     /// LinkedSegment
     /// </summary>
     /// <typeparam name="T">Type</typeparam>
-    internal class LinkedSegment<T> : ReadOnlySequenceSegment<T>
+    internal sealed class LinkedSegment<T> : ReadOnlySequenceSegment<T>
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="LinkedSegment{T}"/> class.
