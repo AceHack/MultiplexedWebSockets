@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
     <ProjectGuid>{E6EE48FD-E3FB-44F0-82BF-6F34C9B15EB5}</ProjectGuid>
     <UserSecretsId>E6EE48FD-E3FB-44F0-82BF-6F34C9B15EB5</UserSecretsId>
     <LangVersion>latest</LangVersion>
@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="System.Net.Http" Version="4.3.4" />
+    <PackageReference Include="System.Net.Http.WinHttpHandler" Version="4.5.1" />
   </ItemGroup>
 
   <ItemGroup>
